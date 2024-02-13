@@ -1,0 +1,9 @@
+opencv-python-headless
+torch
+torchvision
+keras
+numpy
+matplotlib
+pandas
+scikit-learn
+imutils
