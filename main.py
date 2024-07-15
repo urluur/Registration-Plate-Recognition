@@ -1,5 +1,7 @@
 import os
+import cv2
 import xml.etree.ElementTree as ET
+import pytesseract
 
 # Function for extracting data from xml file
 def get_labels(xml_file):
@@ -45,3 +47,30 @@ for xml_file in os.listdir(xml_path):
 
 print(dataset)
 
+### DRAWING RECTANGLE ON THE IMAGE
+
+image_path = './archive/images/Cars17.png'
+image = cv2.imread(image_path)
+
+# Read from the dictionary
+extracted = dataset['Cars17.png']
+
+# Get the values needed to draw a rectangle
+x = extracted['xmin']
+x2 = extracted['xmax']
+y = extracted['ymin']
+y2 = extracted['ymax']
+# Draw a rectangle 
+cv2.rectangle(image, (x,y), (x2, y2), (255, 0 , 0), 2)
+
+# Cuts the image and tries to read the text
+img2 = image[y:y2, x:x2]
+text = pytesseract.image_to_string(img2)
+
+# Draw a text next to the recvtangle including registration
+cv2.putText(image, text, (x-5, y-5), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
+
+# Displays the image in a new window
+cv2.imshow('Test', image);
+cv2.waitKey(0)
+cv2.destroyAllWindows()
