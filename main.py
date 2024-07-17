@@ -2,93 +2,28 @@ import os
 import cv2
 import xml.etree.ElementTree as ET
 import pytesseract
-
-# Function for extracting data from xml file
-def get_labels(xml_file):
-    t = ET.parse(xml_file) #Build xml tree
-    r = t.getroot() # Get the root element
-    labels = {}
-
-    # Get the filename of an image
-    filename = r.find('filename')
-    labels['filename'] = filename.text
-
-    # Find width and height labels from inside the size label
-    size = r.find('size')
-    width = size.find('width')
-    height = size.find('height')
-
-    labels['w'] = int(width.text)
-    labels['h'] = int(height.text)
-
-    # For each plate in the picture get plate locations
-    for o in r.findall('object'):
-        bndbox = o.find('bndbox')
-        xmin = bndbox.find('xmin')
-        ymin = bndbox.find('ymin')
-        xmax = bndbox.find('xmax')
-        ymax = bndbox.find('ymax')
-        labels['xmin'] = int(xmin.text)
-        labels['ymin'] = int(ymin.text)
-        labels['xmax'] = int(xmax.text)
-        labels['ymax'] = int(ymax.text)
-    return labels
+import numpy as np
+from sklearn.model_selection import train_test_split
+from utils import get_labels, load_dataset, preprocess_data
+import tensorflow
+import keras
+from keras import models
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Flatten, GlobalAveragePooling2D, Conv2D, MaxPooling2D, Dropout, BatchNormalization
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 
 
 xml_path = './archive/annotations/'
 img_path = './archive/images/'
 dataset = {}
 
+#Loop over all the xml files and get the data
 for xml_file in os.listdir(xml_path):
     x = os.path.join(xml_path, xml_file)
     extracted = get_labels(x)
     filename = extracted['filename']
     dataset[filename] = extracted
-#print(dataset)
-
-def load_dataset(img_path, xml_path):
-    images = []
-    boxes = []
-    for xml_file in os.listdir(xml_path):
-        data = get_labels(os.path.join(xml_path, xml_file))
-        image_path = os.path.join(img_path, data['filename'])
-        if os.path.exists(image_path):
-            image = cv2.imread(image_path)
-            images.append(image)
-            boxes.append([data['xmin'], data['ymin'], data['xmax'], data['ymax']])
-    return images, boxes
-
-
-from sklearn.model_selection import train_test_split
-import numpy as np
-
-def preprocess_data(images, boxes, target_size=(224, 224)):
-    processed_imgs = []
-    processed_boxes = []
-    for img, box in zip(images, boxes):
-        # Resizing the image
-        h, w = img.shape[:2]
-        img_resized = cv2.resize(img, target_size)
-
-        # Normalization of the image
-        img_normalized = img_resized / 255.0
-
-        # Adjust the box since the image size was changed
-        scale_x = target_size[0] / w
-        scale_y = target_size[1] / h
-
-        box_resized = [box[0] * scale_x,    #xmin
-                       box[1] * scale_y,    #ymin
-                       box[2] * scale_x,    #xmax
-                       box[3] * scale_y]    #ymax
-        
-        processed_imgs.append(img_normalized)
-        processed_boxes.append(box_resized)
-
-    # Change them to numpy array
-    np_imgs = np.array(processed_imgs)
-    np_boxes = np.array(processed_boxes)
-    return np_imgs, np_boxes
 
 # Get all the data from images and xml files
 images, boxes = load_dataset(img_path, xml_path)
@@ -97,17 +32,60 @@ images, boxes = load_dataset(img_path, xml_path)
 imgs_preprocessed, boxes_preprocessed = preprocess_data(images, boxes)
 
 # Splitting the data to train and test sets
-X_train, X_test, y_train, y_test = train_test_split(imgs_preprocessed, boxes_preprocessed)
+X_train, X_test, y_train, y_test = train_test_split(imgs_preprocessed, boxes_preprocessed, test_size=0.15)
 
+#print(X_test)
 
+def build_custom_model(input_shape):
+    model = Sequential([
+        Conv2D(32, (3,3), activation='relu', padding='same', input_shape=input_shape),
+        BatchNormalization(),
+        MaxPooling2D(2,2),
+        Conv2D(64, (3,3), activation='relu', padding='same'),
+        BatchNormalization(),
+        MaxPooling2D(2,2),
+        Conv2D(128, (3,3), activation='relu', padding='same'),
+        BatchNormalization(),
+        MaxPooling2D(2,2),
+        Conv2D(256, (3,3), activation='relu', padding='same'),
+        BatchNormalization(),
+        MaxPooling2D(2,2),
+        Conv2D(512, (3,3), activation='relu', padding='same'),
+        BatchNormalization(),
+        MaxPooling2D(2,2),
+        Conv2D(256, (3,3), activation='relu', padding='same'),
+        BatchNormalization(),
+        MaxPooling2D(2,2),
+        Conv2D(128, (3,3), activation='relu', padding='same'),
+        MaxPooling2D(2,2),
+        Flatten(),
+        Dense(1024, activation='relu'),
+        Dropout(0.5),
+        Dense(4, activation='sigmoid')
+    ])
+    optimizer = Adam(learning_rate=0.001)  # Adjusted learning rate
+    model.compile(optimizer=optimizer, loss='mean_squared_error')
+    return model
 
+#input_shape = imgs_preprocessed[0].shape
+input_shape = (224,224,3)
+model = build_custom_model(input_shape=(224,224,3))
 
+# Got idea for callbacks from chatgpt
+callbacks = [
+    ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=5, min_lr=1e-6),
+    EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
+]
+
+history = model.fit(X_train, y_train, epochs=10, validation_data=(X_test, y_test), batch_size=32, callbacks=callbacks)
+
+predictions = model.predict(X_test)
+
+print(predictions)
 
 ### /////////////////////////////////////////////////////////
 ### DRAWING RECTANGLE ON THE IMAGE - for now not relavant
 ### /////////////////////////////////////////////////////////
-
-
 
 # image_path = './archive/images/Cars175.png'
 # image = cv2.imread(image_path)
