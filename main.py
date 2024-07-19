@@ -9,7 +9,7 @@ import tensorflow
 import keras
 from keras import models
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Flatten, GlobalAveragePooling2D, Conv2D, MaxPooling2D, Dropout, BatchNormalization
+from tensorflow.keras.layers import Dense, Flatten, GlobalAveragePooling2D, Conv2D, MaxPooling2D, Dropout, BatchNormalization, Input
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 
@@ -38,7 +38,8 @@ X_train, X_test, y_train, y_test = train_test_split(imgs_preprocessed, boxes_pre
 
 def build_custom_model(input_shape):
     model = Sequential([
-        Conv2D(32, (3,3), activation='relu', padding='same', input_shape=input_shape),
+        Input(shape=input_shape),
+        Conv2D(32, (3,3), activation='relu', padding='same'),
         BatchNormalization(),
         MaxPooling2D(2,2),
         Conv2D(64, (3,3), activation='relu', padding='same'),
@@ -79,9 +80,38 @@ callbacks = [
 
 history = model.fit(X_train, y_train, epochs=10, validation_data=(X_test, y_test), batch_size=32, callbacks=callbacks)
 
-predictions = model.predict(X_test)
+#predictions = model.predict(X_test)
 
-print(predictions)
+#print(predictions)
+
+def load_and_predict(image_path):
+    image = cv2.imread(image_path)
+    og_image = image.copy()
+
+    image = cv2.resize(image, (224,224))
+    image = image / 255.0
+    image = np.expand_dims(image, axis=0)
+
+    predicted = model.predict(image)[0]
+
+    original_h, original_w = og_image.shape[:2]
+    scale_x, scale_y = original_w / 224, original_h / 224
+
+    xmin, ymin, xmax, ymax = predicted
+    xmin, xmax = int(xmin * 224), int(xmax *224)
+    ymin, ymax = int(ymin * 224), int(ymax * 224)
+    print("Xmin: " + str(xmin) + " | Xmax: "  + str(xmax) + " | Ymin: " + str(ymin) + " | Ymax: " + str(ymax))
+
+    cv2.rectangle(og_image, (xmin, ymin), (xmax, ymax), (255, 0, 0), 2)
+
+    cv2.imshow("Predicted", og_image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+
+load_and_predict('./testImg.jpg')
+
+
 
 ### /////////////////////////////////////////////////////////
 ### DRAWING RECTANGLE ON THE IMAGE - for now not relavant
