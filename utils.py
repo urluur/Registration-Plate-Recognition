@@ -70,7 +70,8 @@ def preprocess_data(images, boxes, target_size=(224, 224)):
         box_resized = [box[0] * scale_x / target_size[0],    #xmin
                        box[1] * scale_y / target_size[1],    #ymin
                        box[2] * scale_x / target_size[0],    #xmax
-                       box[3] * scale_y/ target_size[1]]    #ymax
+                       box[3] * scale_y/ target_size[1],     #ymax
+                       1.0]  # Confidence score, set to 1.0 for all training data
         
         processed_imgs.append(img_normalized)
         processed_boxes.append(box_resized)
