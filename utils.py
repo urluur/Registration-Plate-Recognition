@@ -51,7 +51,7 @@ def load_dataset(img_path, xml_path):
 
 
 # Function that resizes the images and adjusts the bounding boxes relative to resize
-def preprocess_data(images, boxes, target_size=(224, 224)):
+def preprocess_data(images, boxes, target_size=(500, 500)):
     processed_imgs = []
     processed_boxes = []
 

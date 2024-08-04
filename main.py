@@ -5,12 +5,13 @@ import pytesseract
 import numpy as np
 from sklearn.model_selection import train_test_split
 from utils import get_labels, load_dataset, preprocess_data
-import tensorflow
+import tensorflow as tf
 import keras
 from keras import models
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Flatten, GlobalAveragePooling2D, Conv2D, MaxPooling2D, Dropout, BatchNormalization, Input
+from tensorflow.keras.layers import Dense, Flatten, Conv2D, MaxPooling2D, Dropout, BatchNormalization, Input, AveragePooling2D
 from tensorflow.keras.optimizers import Adam
+from keras_cv.losses import IoULoss
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 
 
@@ -34,77 +35,68 @@ imgs_preprocessed, boxes_preprocessed = preprocess_data(images, boxes)
 # Splitting the data to train and test sets
 X_train, X_test, y_train, y_test = train_test_split(imgs_preprocessed, boxes_preprocessed, test_size=0.15)
 
-#print(X_test)
-
 def build_custom_model(input_shape):
     model = Sequential([
         Input(shape=input_shape),
         Conv2D(32, (3,3), activation='relu', padding='same'),
         BatchNormalization(),
-        MaxPooling2D(2,2),
+        MaxPooling2D(3,3),
+
         Conv2D(64, (3,3), activation='relu', padding='same'),
         BatchNormalization(),
-        MaxPooling2D(2,2),
-        Conv2D(128, (3,3), activation='relu', padding='same'),
-        BatchNormalization(),
-        MaxPooling2D(2,2),
-        Conv2D(256, (3,3), activation='relu', padding='same'),
-        BatchNormalization(),
-        MaxPooling2D(2,2),
-        Conv2D(512, (3,3), activation='relu', padding='same'),
-        BatchNormalization(),
-        MaxPooling2D(2,2),
-        Conv2D(256, (3,3), activation='relu', padding='same'),
-        BatchNormalization(),
-        MaxPooling2D(2,2),
-        Conv2D(128, (3,3), activation='relu', padding='same'),
-        MaxPooling2D(2,2),
+        AveragePooling2D(16),
+
         Flatten(),
-        Dense(1024, activation='relu'),
-        Dropout(0.5),
+        Dense(64, activation='relu'),
+        Dense(32, activation='relu'),
+        Dense(16, activation='relu'),
+        Dense(8, activation='relu'),
+        #Dropout(0.5),
         Dense(4, activation='sigmoid')
     ])
-    optimizer = Adam(learning_rate=0.001)  # Adjusted learning rate
-    model.compile(optimizer=optimizer, loss='mean_squared_error')
+    optimizer = Adam(learning_rate=0.01)  # Adjusted learning rate
+    model.compile(optimizer='adam', loss='mean_squared_error')
+    ##model.compile(optimizer=optimizer, loss=IoULoss(bounding_box_format='xyxy', mode='linear'))
     return model
 
-#input_shape = imgs_preprocessed[0].shape
-input_shape = (224,224,3)
-model = build_custom_model(input_shape=(224,224,3))
+model = build_custom_model(input_shape=(500,500,3))
 
 # Got idea for callbacks from chatgpt
 callbacks = [
-    ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=5, min_lr=1e-6),
-    EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
+    ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=2, min_lr=1e-5),
+    EarlyStopping(monitor='val_loss', patience=4, restore_best_weights=True)
 ]
 
-history = model.fit(X_train, y_train, epochs=10, validation_data=(X_test, y_test), batch_size=32, callbacks=callbacks)
-
-#predictions = model.predict(X_test)
-
-#print(predictions)
+history = model.fit(X_train, y_train, epochs=20, validation_data=(X_test, y_test), batch_size=4, callbacks=callbacks)
 
 def load_and_predict(image_path):
     image = cv2.imread(image_path)
     og_image = image.copy()
 
-    image = cv2.resize(image, (224,224))
+    image = cv2.resize(image, (500,500))
     image = image / 255.0
     image = np.expand_dims(image, axis=0)
 
     predicted = model.predict(image)[0]
 
     original_h, original_w = og_image.shape[:2]
-    scale_x, scale_y = original_w / 224, original_h / 224
 
     xmin, ymin, xmax, ymax = predicted
-    xmin, xmax = int(xmin * 224), int(xmax *224)
-    ymin, ymax = int(ymin * 224), int(ymax * 224)
-    print("Xmin: " + str(xmin) + " | Xmax: "  + str(xmax) + " | Ymin: " + str(ymin) + " | Ymax: " + str(ymax))
+    xmin, xmax = int(xmin * original_w), int(xmax * original_w)
+    ymin, ymax = int(ymin * original_h), int(ymax * original_h)
 
+    #Draws a rectangle over the detected registration plate
     cv2.rectangle(og_image, (xmin, ymin), (xmax, ymax), (255, 0, 0), 2)
 
-    cv2.imshow("Predicted", og_image)
+    # Get some margin, transform it to gray and read the text
+    img2 = og_image[ymin-10:ymax+10, xmin-10:xmax+10]
+    grey_img = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
+    text = pytesseract.image_to_string(grey_img)
+    print(f"Plate detected: {text}")
+    # Display the text top right of the rectangle
+    cv2.putText(og_image, text, (xmin-5, ymin-5), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
+
+    cv2.imshow("Detected plate " + text, og_image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
