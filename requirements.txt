@@ -1,9 +1,0 @@
-opencv-python
-numpy
-scikit-learn
-tensorflow
-keras
-keras-cv
-pytesseract
-imutils
-ipywidgets
