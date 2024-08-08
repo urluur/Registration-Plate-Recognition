@@ -7,3 +7,4 @@ keras-cv
 pytesseract
 imutils
 easyocr
+matplotlib
