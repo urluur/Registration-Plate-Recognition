@@ -156,3 +156,4 @@ cython_debug/
 !/report/report.tex
 !/report/report.pdf
 !/report/img
+/archive/*
