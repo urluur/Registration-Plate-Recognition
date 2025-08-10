@@ -35,7 +35,7 @@ def convert_ccpd_to_voc(ccpd_dir, output_dir):
 
     # Process 
     # IMPORTANT: FIRST ONLY 1500 FILES FOR TESTING, DATASET HAS 250000 images (250k)
-    image_files = glob.glob(os.path.join(ccpd_dir, 'ccpd_base', '*.jpg'))[:1500]
+    image_files = glob.glob(os.path.join(ccpd_dir, 'ccpd_base', '*.jpg'))[:10000]
     for img_path in image_files:
         filename = os.path.basename(img_path)
         parts = filename.split('-')
@@ -82,3 +82,4 @@ if __name__ == "__main__":
     ccpd_dir = "./archive/CCPD2019"
     output_dir = "./archive/CCPD2019_converted"
     convert_ccpd_to_voc(ccpd_dir, output_dir)
+    print("Process finished!")
